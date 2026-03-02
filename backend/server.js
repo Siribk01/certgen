@@ -5,28 +5,42 @@ const cors = require('cors');
 const path = require('path');
 const { verifyConnection } = require('./utils/emailSender');
 
+// 
 const app = express();
 
-// Allowed origins
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://certgen-sigma.vercel.app'
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://certgen-sigma.vercel.app"
 ];
 
-// CORS setup
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      console.log("Blocked by CORS:", origin);
-      return callback(null, false);
-    }
-  },
-  credentials: true,
+  origin: allowedOrigins,
+  credentials: true
 }));
+
+app.options("*", cors());
+
+// // Allowed origins
+// const allowedOrigins = [
+//   'http://localhost:3000',
+//   'http://localhost:5173',
+//   'https://certgen-sigma.vercel.app'
+// ];
+
+// // CORS setup
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     if (!origin) return callback(null, true);
+//     if (allowedOrigins.includes(origin)) {
+//       return callback(null, true);
+//     } else {
+//       console.log("Blocked by CORS:", origin);
+//       return callback(null, false);
+//     }
+//   },
+//   credentials: true,
+// }));
 
 // IMPORTANT: handle preflight requests
 app.options('*', cors());
