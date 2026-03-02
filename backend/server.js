@@ -13,18 +13,18 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Static files
 app.use('/certificates', express.static(path.join(__dirname, 'public/certificates')));
-app.use('/uploads',      express.static(path.join(__dirname, 'public/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // Routes
-app.use('/api/auth',         require('./routes/auth'));
-app.use('/api/exams',        require('./routes/exams'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/exams', require('./routes/exams'));
 app.use('/api/participants', require('./routes/participants'));
 app.use('/api/certificates', require('./routes/certificates'));
-app.use('/api/uploads',      require('./routes/uploads'));
+app.use('/api/uploads', require('./routes/uploads'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 4000;
 mongoose.connect(process.env.MONGODB_URI)
   .then(async () => {
     console.log('✅ MongoDB Connected');
