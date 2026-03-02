@@ -14,13 +14,14 @@ const generateCertificatePDF = async (certData, template = 'modern') => {
 
   const browser = await puppeteer.launch({
     headless: 'new',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--font-render-hinting=none',   // ← ADDED
-    ]
+      '--font-render-hinting=none',
+    ],
   });
 
   try {
