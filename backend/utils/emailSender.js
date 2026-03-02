@@ -1,27 +1,16 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+const fs = require('fs');
 
-const createTransporter = () =>
-  nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false,           // false = STARTTLS on port 587 (do NOT use true for 587)
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS   // Must be a Gmail App Password, NOT your real password
-    },
-    tls: {
-      rejectUnauthorized: false,     // ← fixes "self-signed certificate in certificate chain"
-      minVersion: 'TLSv1.2'
-    }
-  });
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Verify the transporter connection — call this on startup to catch config errors early
  */
 const verifyConnection = async () => {
-  const transporter = createTransporter();
-  await transporter.verify();
-  console.log('✅ Email transporter connected successfully');
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not set');
+  }
+  console.log('✅ Resend email configured successfully');
 };
 
 /**
@@ -33,8 +22,6 @@ const sendCertificateEmail = async ({
   customFieldDefs = [], customFieldValues = {},
   certificateId, pdfPath, verifyUrl
 }) => {
-  const transporter = createTransporter();
-
   const fmt = (d) => d
     ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
@@ -122,20 +109,31 @@ const sendCertificateEmail = async ({
   // Log who we're sending to (helpful for debugging)
   console.log(`📧 Sending certificate email to: ${recipientEmail}`);
 
-  const info = await transporter.sendMail({
-    from: process.env.EMAIL_FROM || `"CertGen" <${process.env.EMAIL_USER}>`,
-    to: `"${recipientName}" <${recipientEmail}>`,
+  // Attach PDF if path provided
+  const attachments = [];
+  if (pdfPath && fs.existsSync(pdfPath)) {
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    attachments.push({
+      filename: `Certificate_${recipientName.replace(/\s+/g, '_')}.pdf`,
+      content: pdfBuffer,
+    });
+  }
+
+  const { data, error } = await resend.emails.send({
+    from: process.env.EMAIL_FROM || 'CertGen <onboarding@resend.dev>',
+    to: [`${recipientName} <${recipientEmail}>`],
     subject: `🎓 Your Certificate for "${examTitle}" is Ready!`,
     html,
-    attachments: pdfPath ? [{
-      filename: `Certificate_${recipientName.replace(/\s+/g, '_')}.pdf`,
-      path: pdfPath,
-      contentType: 'application/pdf'
-    }] : []
+    attachments,
   });
 
-  console.log(`✅ Email sent! Message ID: ${info.messageId}`);
-  return info;
+  if (error) {
+    console.error('❌ Resend error:', error);
+    throw new Error(error.message);
+  }
+
+  console.log(`✅ Email sent! Message ID: ${data.id}`);
+  return data;
 };
 
 module.exports = { sendCertificateEmail, verifyConnection };
