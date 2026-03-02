@@ -11,7 +11,7 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
-  process.env.FRONTEND_URL,
+  'https://certgen-sigma.vercel.app',
 ].filter(Boolean); // remove undefined if FRONTEND_URL not set
 
 app.use(cors({
