@@ -39,7 +39,7 @@ const sendCertificateEmail = async ({
     ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
 
-  const formattedIssue    = fmt(new Date());
+  const formattedIssue = fmt(new Date());
   const formattedExamDate = fmt(examDate);
 
   // Build details table rows — only show fields that have values
