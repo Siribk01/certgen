@@ -1,27 +1,34 @@
-const { Resend } = require('resend');
-const fs = require('fs');
+const nodemailer = require('nodemailer');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const createTransporter = () =>
+  nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2'
+    }
+  });
 
-/**
- * Verify the transporter connection — call this on startup to catch config errors early
- */
 const verifyConnection = async () => {
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY is not set');
-  }
-  console.log('✅ Resend email configured successfully');
+  const transporter = createTransporter();
+  await transporter.verify();
+  console.log('✅ Email transporter connected successfully');
 };
 
-/**
- * Send certificate email with PDF attached.
- */
 const sendCertificateEmail = async ({
   recipientName, recipientEmail,
   examTitle, score, grade, examDate,
   customFieldDefs = [], customFieldValues = {},
   certificateId, pdfPath, verifyUrl
 }) => {
+  const transporter = createTransporter();
+
   const fmt = (d) => d
     ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
@@ -29,7 +36,6 @@ const sendCertificateEmail = async ({
   const formattedIssue = fmt(new Date());
   const formattedExamDate = fmt(examDate);
 
-  // Build details table rows — only show fields that have values
   const detailRows = [
     `<tr><td class="dl">Exam / Course</td><td class="dv">${examTitle}</td></tr>`,
     score !== undefined
@@ -40,7 +46,6 @@ const sendCertificateEmail = async ({
       ? `<tr><td class="dl">Exam Date</td><td class="dv">${formattedExamDate}</td></tr>` : '',
     `<tr><td class="dl">Issue Date</td><td class="dv">${formattedIssue}</td></tr>`,
     `<tr><td class="dl">Certificate ID</td><td class="dv" style="font-family:monospace;font-size:12px">${certificateId}</td></tr>`,
-    // Custom fields
     ...customFieldDefs
       .filter(f => f.showOnCertificate)
       .map(f => {
@@ -88,8 +93,9 @@ const sendCertificateEmail = async ({
     <div class="body">
       <div class="greet">Dear <strong>${recipientName}</strong>,</div>
       <div class="msg">
-        We are pleased to inform you that you have successfully completed the examination
-        and your certificate has been issued. Please find it attached to this email.
+        We are pleased to inform you that you have successfully completed
+        the examination and your certificate has been issued.
+        Please find it attached to this email.
       </div>
       <table class="dtbl"><tbody>${detailRows}</tbody></table>
       <div class="att">📎 Your certificate is attached as a PDF. Please save it for your records.</div>
@@ -106,34 +112,22 @@ const sendCertificateEmail = async ({
 </body>
 </html>`;
 
-  // Log who we're sending to (helpful for debugging)
   console.log(`📧 Sending certificate email to: ${recipientEmail}`);
 
-  // Attach PDF if path provided
-  const attachments = [];
-  if (pdfPath && fs.existsSync(pdfPath)) {
-    const pdfBuffer = fs.readFileSync(pdfPath);
-    attachments.push({
-      filename: `Certificate_${recipientName.replace(/\s+/g, '_')}.pdf`,
-      content: pdfBuffer,
-    });
-  }
-
-  const { data, error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM || 'CertGen <onboarding@resend.dev>',
-    to: [`${recipientName} <${recipientEmail}>`],
+  const info = await transporter.sendMail({
+    from: process.env.EMAIL_FROM || `"CertGen" <${process.env.EMAIL_USER}>`,
+    to: `"${recipientName}" <${recipientEmail}>`,
     subject: `🎓 Your Certificate for "${examTitle}" is Ready!`,
     html,
-    attachments,
+    attachments: pdfPath ? [{
+      filename: `Certificate_${recipientName.replace(/\s+/g, '_')}.pdf`,
+      path: pdfPath,
+      contentType: 'application/pdf'
+    }] : []
   });
 
-  if (error) {
-    console.error('❌ Resend error:', error);
-    throw new Error(error.message);
-  }
-
-  console.log(`✅ Email sent! Message ID: ${data.id}`);
-  return data;
+  console.log(`✅ Email sent! Message ID: ${info.messageId}`);
+  return info;
 };
 
 module.exports = { sendCertificateEmail, verifyConnection };

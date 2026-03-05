@@ -1,5 +1,4 @@
 const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium');
 const path = require('path');
 const fs = require('fs');
 const { generateCertificateHTML } = require('../templates/certificate');
@@ -12,29 +11,16 @@ const generateCertificatePDF = async (certData, template = 'modern') => {
   const fileName = `cert_${certData.certificateId}.pdf`;
   const outPath = path.join(outputDir, fileName);
 
-  // Get the correct executable path depending on environment
-  let executablePath;
-  if (process.env.NODE_ENV === 'production') {
-    // On Render — use @sparticuz/chromium which bundles its own Chrome
-    executablePath = await chromium.executablePath();
-  } else {
-    // Local Windows development — use your local Chrome
-    executablePath = process.env.PUPPETEER_EXECUTABLE_PATH ||
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-  }
-
   const browser = await puppeteer.launch({
-    headless: true,
-    executablePath,
+    headless: 'new',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
     args: [
-      ...chromium.args,
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--font-render-hinting=none',
     ],
-    defaultViewport: chromium.defaultViewport,
   });
 
   try {
