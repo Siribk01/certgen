@@ -15,16 +15,11 @@ const FIELD_TYPE_OPTIONS = [
   { value: 'date', label: 'Date' },
 ];
 
-// ── Shared input style ────────────────────────────────────────────────────────
 const s = {
   width: '100%', padding: '10px 14px', border: '1.5px solid #e0e0e0',
   borderRadius: 8, fontSize: 14, fontFamily: 'inherit',
   boxSizing: 'border-box', outline: 'none',
 };
-
-// ── IMPORTANT: Label and Card are defined OUTSIDE the component ───────────────
-// If defined inside, React recreates them on every keystroke, unmounting inputs
-// and causing focus loss after each character typed.
 
 const Label = ({ children, required }) => (
   <label style={{
@@ -48,8 +43,6 @@ const Card = ({ title, children }) => (
   </div>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function CreateExamPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -62,9 +55,9 @@ export default function CreateExamPage() {
 
   const set = (key) => (e) => setForm(prev => ({ ...prev, [key]: e.target.value }));
 
-  // ── custom field helpers ──────────────────────────────────────────────────
   const addField = () => setCustomFields(prev => [...prev, {
-    key: `field_${Date.now()}`, label: '', type: 'text',
+    key: `field_${Date.now()}`,      // key stays fixed
+    label: '', type: 'text',
     showOnCertificate: true, required: false,
   }]);
 
@@ -72,9 +65,7 @@ export default function CreateExamPage() {
     setCustomFields(prev => {
       const next = [...prev];
       next[idx] = { ...next[idx], ...patch };
-      if (patch.label !== undefined) {
-        next[idx].key = patch.label.toLowerCase().replace(/[^a-z0-9]/g, '_') || `field_${idx}`;
-      }
+      // key is no longer changed dynamically
       return next;
     });
   };
@@ -112,7 +103,6 @@ export default function CreateExamPage() {
       </div>
 
       <form onSubmit={handleSubmit}>
-
         {/* ── Exam Details ── */}
         <Card title="📝 Exam Details">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
