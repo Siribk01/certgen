@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import api from '../utils/api'
 import toast from 'react-hot-toast'
 
-/* ─── tiny responsive hook ─────────────────────────────────────────────── */
 function useWindowWidth() {
   const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
   useEffect(() => {
@@ -64,32 +63,31 @@ export default function CertificatesDashboardPage() {
     if (isMobile) setShowExamList(false)
   }
 
-  /* build participantId → cert map */
+  // participantId → cert map
   const certMap = {}
   certificates.forEach(c => {
     if (c.participant) certMap[c.participant._id || c.participant] = c
   })
 
-  const passedList = participants.filter(p => p.passed)
-  const issuedCount = passedList.filter(p => certMap[p._id]).length
-  const pendingCount = passedList.filter(p => !certMap[p._id]).length
+  const issuedCount = participants.filter(p => certMap[p._id]).length
+  const pendingCount = participants.filter(p => !certMap[p._id]).length
 
+  // ── Filters: all / issued / not_issued only (no "passed" filter) ──────────
   const filtered = participants.filter(p => {
     const q = searchTerm.toLowerCase()
     const match = !q || p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)
-    if (filterStatus === 'passed') return match && p.passed
     if (filterStatus === 'issued') return match && !!certMap[p._id]
-    if (filterStatus === 'not_issued') return match && p.passed && !certMap[p._id]
-    return match
+    if (filterStatus === 'not_issued') return match && !certMap[p._id]
+    return match // 'all'
   })
 
-  /* selection helpers */
+  // selection helpers — all participants eligible
   const toggleSelect = id => { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s) }
-  const selectPending = () => setSelected(new Set(filtered.filter(p => p.passed && !certMap[p._id]).map(p => p._id)))
-  const selectAllPass = () => setSelected(new Set(filtered.filter(p => p.passed).map(p => p._id)))
+  const selectPending = () => setSelected(new Set(filtered.filter(p => !certMap[p._id]).map(p => p._id)))
+  const selectAll = () => setSelected(new Set(filtered.map(p => p._id)))
   const clearSel = () => setSelected(new Set())
 
-  /* generate / send */
+  // generate / send
   const handleBulkGenerate = async (sendEmail = true) => {
     if (!selected.size) return toast.error('Select at least one participant')
     setGenerating(true)
@@ -107,7 +105,7 @@ export default function CertificatesDashboardPage() {
     } finally { setGenerating(false) }
   }
 
-  /* single download */
+  // single download
   const handleDownload = async (participantId) => {
     setActionLoading(a => ({ ...a, [participantId]: 'downloading' }))
     try {
@@ -129,7 +127,7 @@ export default function CertificatesDashboardPage() {
     } finally { setActionLoading(a => ({ ...a, [participantId]: null })) }
   }
 
-  /* single email */
+  // single email
   const handleSendEmail = async (participantId) => {
     setActionLoading(a => ({ ...a, [participantId]: 'sending' }))
     try {
@@ -141,7 +139,7 @@ export default function CertificatesDashboardPage() {
     } finally { setActionLoading(a => ({ ...a, [participantId]: null })) }
   }
 
-  /* ── BULK DOWNLOAD ZIP ─────────────────────────────────────────────────── */
+  // bulk zip download
   const handleBulkDownload = async () => {
     if (!selectedExam) return
     if (issuedCount === 0) {
@@ -159,8 +157,7 @@ export default function CertificatesDashboardPage() {
       if (!res.ok) {
         let msg = 'Download failed'
         try { const j = await res.json(); msg = j.message || msg } catch { }
-        toast.error(msg)
-        return
+        toast.error(msg); return
       }
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -168,9 +165,7 @@ export default function CertificatesDashboardPage() {
         href: url,
         download: `certificates_${selectedExam.title.replace(/\s+/g, '_')}.zip`
       })
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
+      document.body.appendChild(a); a.click(); a.remove()
       window.URL.revokeObjectURL(url)
       toast.success(`📦 ZIP downloaded (${issuedCount} certificate${issuedCount !== 1 ? 's' : ''})`)
     } catch (err) {
@@ -178,9 +173,9 @@ export default function CertificatesDashboardPage() {
     } finally { setZipping(false) }
   }
 
-  /* revoke */
+  // revoke
   const handleRevoke = async (certId) => {
-    if (!window.confirm('Revoke this certificate? The participant will no longer be able to verify it.')) return
+    if (!window.confirm('Revoke this certificate?')) return
     try {
       await api.delete(`/certificates/${certId}`)
       toast.success('Certificate revoked')
@@ -190,19 +185,17 @@ export default function CertificatesDashboardPage() {
     }
   }
 
-  /* ── styles ─────────────────────────────────────────────────────────────── */
   const btn = (bg, color, border = 'none') => ({
     padding: isMobile ? '8px 12px' : '8px 16px',
-    background: bg, color, border,
-    borderRadius: 8, fontSize: isMobile ? 12 : 13,
-    fontWeight: 700, cursor: 'pointer',
-    whiteSpace: 'nowrap', lineHeight: 1.4,
-    fontFamily: 'inherit',
+    background: bg, color, border, borderRadius: 8,
+    fontSize: isMobile ? 12 : 13, fontWeight: 700,
+    cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.4, fontFamily: 'inherit',
   })
 
   const StatCard = ({ label, value, color, emoji }) => (
     <div style={{
-      background: '#fff', borderRadius: 12, padding: isMobile ? '12px 14px' : '16px 20px',
+      background: '#fff', borderRadius: 12,
+      padding: isMobile ? '12px 14px' : '16px 20px',
       boxShadow: '0 2px 10px rgba(0,0,0,.06)', borderLeft: `4px solid ${color}`
     }}>
       <div style={{ fontSize: isMobile ? 18 : 22, marginBottom: 4 }}>{emoji}</div>
@@ -222,35 +215,28 @@ export default function CertificatesDashboardPage() {
   return (
     <div style={{ fontFamily: "'Inter',-apple-system,sans-serif", minHeight: '100vh' }}>
 
-      {/* ── Page header ──────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: '#1a1a2e', margin: '0 0 4px' }}>
           🎓 Certificate Management
         </h1>
         <p style={{ color: '#888', margin: 0, fontSize: 13 }}>
-          Generate, download and email certificates to participants
+          Generate, download and email certificates to all participants
         </p>
       </div>
 
-      {/* ── Layout: sidebar + main ────────────────────────────────────────── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isTablet ? '1fr' : '260px 1fr',
-        gap: 16,
-        alignItems: 'start',
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr' : '260px 1fr', gap: 16, alignItems: 'start' }}>
 
-        {/* ── Exam list ─────────────────────────────────────────────────── */}
+        {/* ── Exam list ── */}
         <div>
-          {/* On mobile show a toggle */}
           {isTablet && selectedExam && (
-            <button
-              onClick={() => setShowExamList(v => !v)}
-              style={{ ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'), width: '100%', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <button onClick={() => setShowExamList(v => !v)}
+              style={{
+                ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'), width: '100%', marginBottom: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+              }}>
               {showExamList ? '▲ Hide exam list' : `▼ Change exam: ${selectedExam.title}`}
             </button>
           )}
-
           {(!isTablet || showExamList) && (
             <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,.06)', overflow: 'hidden' }}>
               <div style={{ padding: '14px 18px', borderBottom: '1px solid #f0f0f0', fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>
@@ -261,20 +247,15 @@ export default function CertificatesDashboardPage() {
                   <div style={{ padding: 24, textAlign: 'center', color: '#aaa' }}>Loading...</div>
                 ) : exams.length === 0 ? (
                   <div style={{ padding: 24, textAlign: 'center', color: '#aaa', fontSize: 13 }}>
-                    No exams yet.{' '}
-                    <Link to="/exams/new" style={{ color: '#1a73e8' }}>Create one →</Link>
+                    No exams yet. <Link to="/exams/new" style={{ color: '#1a73e8' }}>Create one →</Link>
                   </div>
                 ) : exams.map(exam => (
-                  <div
-                    key={exam._id}
-                    onClick={() => selectExam(exam)}
-                    style={{
-                      padding: '13px 18px', cursor: 'pointer',
-                      borderBottom: '1px solid #f8f8f8',
-                      borderLeft: selectedExam?._id === exam._id ? '3px solid #1a73e8' : '3px solid transparent',
-                      background: selectedExam?._id === exam._id ? '#e8f0fe' : 'transparent',
-                      transition: 'all 0.15s',
-                    }}>
+                  <div key={exam._id} onClick={() => selectExam(exam)} style={{
+                    padding: '13px 18px', cursor: 'pointer', borderBottom: '1px solid #f8f8f8',
+                    borderLeft: selectedExam?._id === exam._id ? '3px solid #1a73e8' : '3px solid transparent',
+                    background: selectedExam?._id === exam._id ? '#e8f0fe' : 'transparent',
+                    transition: 'all 0.15s',
+                  }}>
                     <div style={{ fontWeight: 600, fontSize: 13, color: selectedExam?._id === exam._id ? '#1a73e8' : '#333' }}>
                       {exam.title}
                     </div>
@@ -286,7 +267,7 @@ export default function CertificatesDashboardPage() {
           )}
         </div>
 
-        {/* ── Right panel ───────────────────────────────────────────────── */}
+        {/* ── Right panel ── */}
         <div>
           {!selectedExam ? (
             <div style={{
@@ -299,13 +280,11 @@ export default function CertificatesDashboardPage() {
             </div>
           ) : (
             <>
-              {/* Exam header banner */}
+              {/* Exam header */}
               <div style={{
                 background: 'linear-gradient(135deg,#1a73e8,#0d47a1)', borderRadius: 12,
-                padding: isMobile ? '16px' : '18px 24px',
-                marginBottom: 14, color: '#fff',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                flexWrap: 'wrap', gap: 10,
+                padding: isMobile ? 16 : '18px 24px', marginBottom: 14, color: '#fff',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10
               }}>
                 <div>
                   <h2 style={{ margin: '0 0 3px', fontSize: isMobile ? 15 : 18, fontWeight: 800 }}>{selectedExam.title}</h2>
@@ -313,119 +292,90 @@ export default function CertificatesDashboardPage() {
                     {selectedExam.instructor}{selectedExam.organization ? ` · ${selectedExam.organization}` : ''}
                   </p>
                 </div>
-                <Link
-                  to={`/exams/${selectedExam._id}/certificate-design`}
-                  style={{
-                    padding: '7px 14px', background: 'rgba(255,255,255,.15)', color: '#fff',
-                    borderRadius: 8, textDecoration: 'none', fontSize: 12, fontWeight: 700,
-                    backdropFilter: 'blur(4px)', whiteSpace: 'nowrap'
-                  }}>
-                  🎨 Edit Design
-                </Link>
+                <Link to={`/exams/${selectedExam._id}/certificate-design`} style={{
+                  padding: '7px 14px', background: 'rgba(255,255,255,.15)', color: '#fff',
+                  borderRadius: 8, textDecoration: 'none', fontSize: 12, fontWeight: 700,
+                  backdropFilter: 'blur(4px)', whiteSpace: 'nowrap'
+                }}>🎨 Edit Design</Link>
               </div>
 
-              {/* Stats grid */}
+              {/* Stats */}
               {!loadingParts && (
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)',
-                  gap: 10, marginBottom: 14,
+                  gap: 10, marginBottom: 14
                 }}>
                   <StatCard label="Total" value={participants.length} color="#1a73e8" emoji="👥" />
-                  <StatCard label="Passed" value={passedList.length} color="#2e7d32" emoji="✅" />
+                  <StatCard label="Passed" value={participants.filter(p => p.passed).length} color="#2e7d32" emoji="✅" />
                   <StatCard label="Issued" value={issuedCount} color="#c8a96e" emoji="🎓" />
                   <StatCard label="Pending" value={pendingCount} color="#e65100" emoji="⏳" />
                 </div>
               )}
 
-              {/* ── DOWNLOAD ALL ZIP — always visible when exam selected ── */}
+              {/* Bulk ZIP download */}
               {!loadingParts && (
                 <div style={{
                   background: 'linear-gradient(135deg,#e8f5e9,#f1f8e9)',
-                  border: '1.5px solid #a5d6a7',
-                  borderRadius: 12, padding: isMobile ? 14 : '16px 20px',
-                  marginBottom: 14,
-                  display: 'flex', alignItems: 'center',
-                  justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+                  border: '1.5px solid #a5d6a7', borderRadius: 12,
+                  padding: isMobile ? 14 : '16px 20px', marginBottom: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12
                 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#1b5e20' }}>
-                      📦 Bulk Download All Certificates
-                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#1b5e20' }}>📦 Bulk Download All Certificates</div>
                     <div style={{ fontSize: 12, color: '#388e3c', marginTop: 3 }}>
                       {issuedCount > 0
-                        ? `${issuedCount} issued certificate${issuedCount !== 1 ? 's' : ''} ready — downloads as a single ZIP file`
-                        : 'No certificates have been issued yet for this exam'}
+                        ? `${issuedCount} issued certificate${issuedCount !== 1 ? 's' : ''} ready — downloads as ZIP`
+                        : 'No certificates issued yet for this exam'}
                     </div>
                   </div>
-                  <button
-                    onClick={handleBulkDownload}
-                    disabled={zipping || issuedCount === 0}
-                    style={{
-                      ...btn(
-                        issuedCount === 0 ? '#ccc' : 'linear-gradient(135deg,#2e7d32,#1b5e20)',
-                        '#fff'
-                      ),
-                      opacity: issuedCount === 0 ? 0.6 : 1,
-                      cursor: issuedCount === 0 ? 'not-allowed' : 'pointer',
-                      boxShadow: issuedCount > 0 ? '0 4px 14px rgba(46,125,50,.3)' : 'none',
-                      padding: '10px 20px',
-                      fontSize: 13,
-                    }}>
+                  <button onClick={handleBulkDownload} disabled={zipping || issuedCount === 0} style={{
+                    ...btn(issuedCount === 0 ? '#ccc' : 'linear-gradient(135deg,#2e7d32,#1b5e20)', '#fff'),
+                    opacity: issuedCount === 0 ? 0.6 : 1,
+                    cursor: issuedCount === 0 ? 'not-allowed' : 'pointer',
+                    boxShadow: issuedCount > 0 ? '0 4px 14px rgba(46,125,50,.3)' : 'none',
+                    padding: '10px 20px', fontSize: 13,
+                  }}>
                     {zipping ? '⏳ Preparing ZIP...' : `⬇️ Download All ZIP (${issuedCount})`}
                   </button>
                 </div>
               )}
 
-              {/* Bulk generate / send actions */}
+              {/* Bulk generate actions */}
               {!loadingParts && (
                 <div style={{
-                  background: '#fff', borderRadius: 12,
-                  padding: isMobile ? 12 : '14px 18px',
-                  marginBottom: 14,
-                  boxShadow: '0 2px 12px rgba(0,0,0,.06)',
+                  background: '#fff', borderRadius: 12, padding: isMobile ? 12 : '14px 18px',
+                  marginBottom: 14, boxShadow: '0 2px 12px rgba(0,0,0,.06)'
                 }}>
                   <div style={{
                     fontSize: 11, fontWeight: 700, color: '#aaa', textTransform: 'uppercase',
                     letterSpacing: 1, marginBottom: 10
-                  }}>
-                    Bulk Generate
-                  </div>
+                  }}>Bulk Generate</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button onClick={selectPending}
-                      style={{ ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7') }}>
+                    <button onClick={selectPending} style={{ ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7') }}>
                       Select Pending ({pendingCount})
                     </button>
-                    <button onClick={selectAllPass}
-                      style={{ ...btn('#f5f5f5', '#555', '1px solid #e0e0e0') }}>
-                      Select All Passed ({passedList.length})
+                    <button onClick={selectAll} style={{ ...btn('#f5f5f5', '#555', '1px solid #e0e0e0') }}>
+                      Select All ({participants.length})
                     </button>
                     {selected.size > 0 && (
-                      <button onClick={clearSel}
-                        style={{ ...btn('#fff5f5', '#c62828', '1px solid #ffcdd2') }}>
+                      <button onClick={clearSel} style={{ ...btn('#fff5f5', '#c62828', '1px solid #ffcdd2') }}>
                         ✕ Clear ({selected.size})
                       </button>
                     )}
                     {selected.size > 0 && (
                       <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => handleBulkGenerate(false)}
-                          disabled={generating}
-                          style={{
-                            ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'),
-                            opacity: generating ? 0.6 : 1, cursor: generating ? 'not-allowed' : 'pointer'
-                          }}>
+                        <button onClick={() => handleBulkGenerate(false)} disabled={generating} style={{
+                          ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'),
+                          opacity: generating ? 0.6 : 1, cursor: generating ? 'not-allowed' : 'pointer'
+                        }}>
                           {generating ? '⏳' : '📄'} Generate ({selected.size})
                         </button>
-                        <button
-                          onClick={() => handleBulkGenerate(true)}
-                          disabled={generating}
-                          style={{
-                            ...btn('linear-gradient(135deg,#1a73e8,#0d47a1)', '#fff'),
-                            opacity: generating ? 0.7 : 1,
-                            cursor: generating ? 'not-allowed' : 'pointer',
-                            boxShadow: '0 4px 14px rgba(26,115,232,.25)',
-                          }}>
+                        <button onClick={() => handleBulkGenerate(true)} disabled={generating} style={{
+                          ...btn('linear-gradient(135deg,#1a73e8,#0d47a1)', '#fff'),
+                          opacity: generating ? 0.7 : 1, cursor: generating ? 'not-allowed' : 'pointer',
+                          boxShadow: '0 4px 14px rgba(26,115,232,.25)',
+                        }}>
                           {generating ? '⏳ Processing...' : `📧 Generate & Email (${selected.size})`}
                         </button>
                       </div>
@@ -434,41 +384,31 @@ export default function CertificatesDashboardPage() {
                 </div>
               )}
 
-              {/* Search + filter */}
+              {/* Search + filter — only All / Issued / Not Issued */}
               {!loadingParts && (
                 <div style={{
-                  background: '#fff', borderRadius: 12,
-                  padding: isMobile ? 10 : '11px 16px',
-                  marginBottom: 12,
-                  boxShadow: '0 2px 12px rgba(0,0,0,.06)',
+                  background: '#fff', borderRadius: 12, padding: isMobile ? 10 : '11px 16px',
+                  marginBottom: 12, boxShadow: '0 2px 12px rgba(0,0,0,.06)',
                   display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap'
                 }}>
-                  <input
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    placeholder="🔍 Search name or email..."
-                    style={{
+                  <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="🔍 Search name or email..." style={{
                       flex: 1, minWidth: 160, padding: '8px 12px',
                       border: '1.5px solid #e0e0e0', borderRadius: 8, fontSize: 13,
                       outline: 'none', fontFamily: 'inherit'
-                    }}
-                  />
+                    }} />
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {[
-                      { v: 'all', label: 'All' },
-                      { v: 'passed', label: 'Passed' },
-                      { v: 'issued', label: 'Issued' },
-                      { v: 'not_issued', label: 'Not Issued' },
+                      { v: 'all', label: `All (${participants.length})` },
+                      { v: 'issued', label: `Issued (${issuedCount})` },
+                      { v: 'not_issued', label: `Not Issued (${pendingCount})` },
                     ].map(({ v, label }) => (
                       <button key={v} onClick={() => setFilterStatus(v)} style={{
                         padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        fontSize: 12, fontWeight: filterStatus === v ? 700 : 400,
+                        fontSize: 12, fontWeight: filterStatus === v ? 700 : 400, fontFamily: 'inherit',
                         background: filterStatus === v ? '#1a73e8' : '#f5f5f5',
                         color: filterStatus === v ? '#fff' : '#555',
-                        fontFamily: 'inherit',
-                      }}>
-                        {label}
-                      </button>
+                      }}>{label}</button>
                     ))}
                   </div>
                 </div>
@@ -490,7 +430,6 @@ export default function CertificatesDashboardPage() {
                   No participants match the current filter
                 </div>
               ) : isMobile ? (
-                /* ── Mobile card list ─── */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {filtered.map(p => {
                     const cert = certMap[p._id]
@@ -504,81 +443,54 @@ export default function CertificatesDashboardPage() {
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {p.passed && (
-                              <input type="checkbox" checked={selected.has(p._id)}
-                                onChange={() => toggleSelect(p._id)}
-                                style={{ width: 16, height: 16, accentColor: '#1a73e8', cursor: 'pointer', flexShrink: 0 }} />
-                            )}
+                            <input type="checkbox" checked={selected.has(p._id)} onChange={() => toggleSelect(p._id)}
+                              style={{ width: 16, height: 16, accentColor: '#1a73e8', cursor: 'pointer', flexShrink: 0 }} />
                             <div>
                               <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{p.name}</div>
                               <div style={{ fontSize: 12, color: '#aaa' }}>{p.email}</div>
                             </div>
                           </div>
-                          <span style={{
-                            padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                            background: p.passed ? '#e8f5e9' : '#ffeaea',
-                            color: p.passed ? '#2e7d32' : '#c62828', flexShrink: 0
-                          }}>
-                            {p.passed ? '✅ Passed' : '❌ Failed'}
-                          </span>
+                          {cert ? (
+                            <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fff8e1', color: '#c8a96e' }}>🎓 Issued</span>
+                          ) : (
+                            <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fff3e0', color: '#e65100' }}>⏳ Pending</span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: p.passed ? '#2e7d32' : '#c62828' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#555' }}>
                             {p.score !== undefined ? `${p.score}%` : '—'}
                             {p.grade && <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400, marginLeft: 5 }}>{p.grade}</span>}
                           </div>
-                          <div>
-                            {cert ? (
-                              <span style={{
-                                padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                                background: '#fff8e1', color: '#c8a96e'
-                              }}>🎓 Issued</span>
-                            ) : p.passed ? (
-                              <span style={{
-                                padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                                background: '#fff3e0', color: '#e65100'
-                              }}>⏳ Pending</span>
-                            ) : null}
-                          </div>
                         </div>
-                        {p.passed && (
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button onClick={() => handleDownload(p._id)} disabled={!!al}
-                              style={{ ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'), flex: 1 }}>
-                              {al === 'downloading' ? '⏳' : '⬇️'} Download
-                            </button>
-                            <button onClick={() => handleSendEmail(p._id)} disabled={!!al}
-                              style={{ ...btn('#e8f5e9', '#2e7d32', '1px solid #c8e6c9'), flex: 1 }}>
-                              {al === 'sending' ? '⏳' : '📧'} Email
-                            </button>
-                            {cert && (
-                              <button onClick={() => handleRevoke(cert._id)}
-                                style={{ ...btn('#fff5f5', '#c62828', '1px solid #ffcdd2'), padding: '8px 12px' }}>
-                                🗑️
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button onClick={() => handleDownload(p._id)} disabled={!!al}
+                            style={{ ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'), flex: 1 }}>
+                            {al === 'downloading' ? '⏳' : '⬇️'} Download
+                          </button>
+                          <button onClick={() => handleSendEmail(p._id)} disabled={!!al}
+                            style={{ ...btn('#e8f5e9', '#2e7d32', '1px solid #c8e6c9'), flex: 1 }}>
+                            {al === 'sending' ? '⏳' : '📧'} Email
+                          </button>
+                          {cert && (
+                            <button onClick={() => handleRevoke(cert._id)}
+                              style={{ ...btn('#fff5f5', '#c62828', '1px solid #ffcdd2'), padding: '8px 12px' }}>🗑️</button>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
                 </div>
               ) : (
-                /* ── Desktop / tablet table ─── */
-                <div style={{
-                  background: '#fff', borderRadius: 12, overflow: 'hidden',
-                  boxShadow: '0 2px 12px rgba(0,0,0,.06)'
-                }}>
+                <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.06)' }}>
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
                       <thead>
                         <tr style={{ background: '#f8f9ff', borderBottom: '2px solid #e8eaf0' }}>
-                          {['', 'Participant', 'Score', 'Status', 'Certificate', 'Actions'].map((h, i) => (
+                          {['', 'Participant', 'Score', 'Certificate', 'Actions'].map((h, i) => (
                             <th key={i} style={{
-                              padding: '12px 14px', textAlign: i === 0 ? 'left' : i <= 1 ? 'left' : 'center',
+                              padding: '12px 14px', textAlign: i <= 1 ? 'left' : 'center',
                               fontSize: 11, fontWeight: 700, color: '#888',
-                              textTransform: 'uppercase', letterSpacing: 0.5,
-                              whiteSpace: 'nowrap',
+                              textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap',
                               width: i === 0 ? 36 : undefined,
                             }}>{h}</th>
                           ))}
@@ -591,36 +503,21 @@ export default function CertificatesDashboardPage() {
                           return (
                             <tr key={p._id} style={{
                               borderBottom: '1px solid #f5f5f5',
-                              background: selected.has(p._id) ? '#e8f0fe' : i % 2 === 0 ? '#fff' : '#fafafa',
+                              background: selected.has(p._id) ? '#e8f0fe' : i % 2 === 0 ? '#fff' : '#fafafa'
                             }}>
                               <td style={{ padding: '11px 14px' }}>
-                                {p.passed && (
-                                  <input type="checkbox" checked={selected.has(p._id)}
-                                    onChange={() => toggleSelect(p._id)}
-                                    style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#1a73e8' }} />
-                                )}
+                                <input type="checkbox" checked={selected.has(p._id)} onChange={() => toggleSelect(p._id)}
+                                  style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#1a73e8' }} />
                               </td>
                               <td style={{ padding: '11px 14px' }}>
                                 <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e' }}>{p.name}</div>
                                 <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{p.email}</div>
                               </td>
                               <td style={{ padding: '11px 14px', textAlign: 'center' }}>
-                                <span style={{
-                                  fontSize: 13, fontWeight: 700,
-                                  color: p.passed ? '#2e7d32' : '#c62828'
-                                }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: p.passed ? '#2e7d32' : '#e65100' }}>
                                   {p.score !== undefined ? `${p.score}%` : '—'}
                                 </span>
                                 {p.grade && <div style={{ fontSize: 10, color: '#aaa' }}>{p.grade}</div>}
-                              </td>
-                              <td style={{ padding: '11px 14px', textAlign: 'center' }}>
-                                <span style={{
-                                  padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                                  background: p.passed ? '#e8f5e9' : '#ffeaea',
-                                  color: p.passed ? '#2e7d32' : '#c62828',
-                                }}>
-                                  {p.passed ? '✅ Passed' : '❌ Failed'}
-                                </span>
                               </td>
                               <td style={{ padding: '11px 14px', textAlign: 'center' }}>
                                 {cert ? (
@@ -628,52 +525,39 @@ export default function CertificatesDashboardPage() {
                                     <span style={{
                                       padding: '3px 10px', borderRadius: 20, fontSize: 11,
                                       fontWeight: 700, background: '#fff8e1', color: '#c8a96e'
-                                    }}>
-                                      🎓 Issued
-                                    </span>
+                                    }}>🎓 Issued</span>
                                     <div style={{ fontSize: 10, color: '#bbb', marginTop: 3 }}>
                                       {new Date(cert.issuedAt || cert.createdAt).toLocaleDateString()}
                                     </div>
                                   </>
-                                ) : p.passed ? (
+                                ) : (
                                   <span style={{
                                     padding: '3px 10px', borderRadius: 20, fontSize: 11,
                                     fontWeight: 700, background: '#fff3e0', color: '#e65100'
-                                  }}>
-                                    ⏳ Pending
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: 11, color: '#ddd' }}>—</span>
+                                  }}>⏳ Pending</span>
                                 )}
                               </td>
                               <td style={{ padding: '11px 14px' }}>
-                                {p.passed && (
-                                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                                    <button onClick={() => handleDownload(p._id)} disabled={!!al}
-                                      title="Generate & download PDF"
-                                      style={{
-                                        ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'),
-                                        opacity: al ? 0.6 : 1, cursor: al ? 'not-allowed' : 'pointer'
-                                      }}>
-                                      {al === 'downloading' ? '⏳' : '⬇️'} PDF
-                                    </button>
-                                    <button onClick={() => handleSendEmail(p._id)} disabled={!!al}
-                                      title="Send certificate by email"
-                                      style={{
-                                        ...btn('#e8f5e9', '#2e7d32', '1px solid #c8e6c9'),
-                                        opacity: al ? 0.6 : 1, cursor: al ? 'not-allowed' : 'pointer'
-                                      }}>
-                                      {al === 'sending' ? '⏳' : '📧'} Email
-                                    </button>
-                                    {cert && (
-                                      <button onClick={() => handleRevoke(cert._id)}
-                                        title="Revoke certificate"
-                                        style={{ ...btn('#fff5f5', '#c62828', '1px solid #ffcdd2') }}>
-                                        🗑️
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
+                                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                                  <button onClick={() => handleDownload(p._id)} disabled={!!al} title="Generate & download PDF"
+                                    style={{
+                                      ...btn('#f0f7ff', '#1a73e8', '1px solid #c5d9f7'),
+                                      opacity: al ? 0.6 : 1, cursor: al ? 'not-allowed' : 'pointer'
+                                    }}>
+                                    {al === 'downloading' ? '⏳' : '⬇️'} PDF
+                                  </button>
+                                  <button onClick={() => handleSendEmail(p._id)} disabled={!!al} title="Send by email"
+                                    style={{
+                                      ...btn('#e8f5e9', '#2e7d32', '1px solid #c8e6c9'),
+                                      opacity: al ? 0.6 : 1, cursor: al ? 'not-allowed' : 'pointer'
+                                    }}>
+                                    {al === 'sending' ? '⏳' : '📧'} Email
+                                  </button>
+                                  {cert && (
+                                    <button onClick={() => handleRevoke(cert._id)} title="Revoke"
+                                      style={{ ...btn('#fff5f5', '#c62828', '1px solid #ffcdd2') }}>🗑️</button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           )

@@ -19,19 +19,7 @@ router.get('/verify/:certificateId', async (req, res) => {
   }
 });
 
-// ─── Get all certificates for an exam ─────────────────────────────────────────
-router.get('/exam/:examId', protect, async (req, res) => {
-  try {
-    const exam = await Exam.findOne({ _id: req.params.examId, createdBy: req.user._id });
-    if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
-    const certs = await Certificate.find({ exam: req.params.examId }).sort('-createdAt');
-    res.json({ success: true, count: certs.length, certificates: certs });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// ─── Helper: build cert data from participant + exam ───────────────────────────
+// ─── Helper: build cert data ───────────────────────────────────────────────────
 const buildCertData = (participant, exam, certificateId) => ({
   certificateId,
   participantName: participant.name,
@@ -59,7 +47,6 @@ const buildCertData = (participant, exam, certificateId) => ({
   showExamDate: exam.showExamDate !== false,
   showInstructor: exam.showInstructor !== false,
   showOrganization: exam.showOrganization !== false,
-  // custom fields
   customFieldDefs: exam.customFields || [],
   customFieldValues: Object.fromEntries(
     participant.customFieldValues instanceof Map
@@ -68,7 +55,7 @@ const buildCertData = (participant, exam, certificateId) => ({
   )
 });
 
-// ─── ADMIN: Generate + send certificate for ONE participant ────────────────────
+// ─── Generate + send for ONE participant (any participant, not just passed) ────
 router.post('/generate/:participantId', protect, async (req, res) => {
   try {
     const participant = await Participant.findById(req.params.participantId).populate('exam');
@@ -78,36 +65,21 @@ router.post('/generate/:participantId', protect, async (req, res) => {
     }
 
     const { sendEmail = true } = req.body;
-
-    // Reuse existing cert ID if cert already exists (re-generation scenario)
-    let existingCert = await Certificate.findOne({ participant: participant._id });
-    const certificateId = existingCert?.certificateId || `CERT-${uuidv4().toUpperCase().slice(0, 12)}`;
-
+    let existing = await Certificate.findOne({ participant: participant._id });
+    const certificateId = existing?.certificateId || `CERT-${uuidv4().toUpperCase().slice(0, 12)}`;
     const certData = buildCertData(participant, participant.exam, certificateId);
-
-    // Generate PDF
     const pdfResult = await generateCertificatePDF(certData, participant.exam.certificateTemplate || 'modern');
 
-    // Upsert certificate record
-    if (existingCert) {
-      Object.assign(existingCert, {
-        ...certData,
-        pdfPath: pdfResult.path,
-        emailSent: false,
-        participant: participant._id,
-        exam: participant.exam._id,
-      });
-      await existingCert.save();
+    if (existing) {
+      Object.assign(existing, { ...certData, pdfPath: pdfResult.path, emailSent: false });
+      await existing.save();
     } else {
-      existingCert = await Certificate.create({
-        ...certData,
-        participant: participant._id,
-        exam: participant.exam._id,
-        pdfPath: pdfResult.path
+      existing = await Certificate.create({
+        ...certData, participant: participant._id,
+        exam: participant.exam._id, pdfPath: pdfResult.path
       });
     }
 
-    // Mark participant
     participant.certificateIssued = true;
     participant.certificateId = certificateId;
 
@@ -126,19 +98,18 @@ router.post('/generate/:participantId', protect, async (req, res) => {
         pdfPath: pdfResult.path,
         verifyUrl
       });
-      existingCert.emailSent = true;
-      existingCert.emailSentAt = new Date();
-      existingCert.sentBy = req.user._id;
+      existing.emailSent = true;
+      existing.emailSentAt = new Date();
+      existing.sentBy = req.user._id;
       participant.certificateSentAt = new Date();
-      await existingCert.save();
+      await existing.save();
     }
 
     await participant.save();
-
     res.json({
       success: true,
-      message: sendEmail ? 'Certificate generated and emailed to participant' : 'Certificate generated (email not sent)',
-      certificate: existingCert,
+      message: sendEmail ? 'Certificate generated and emailed' : 'Certificate generated',
+      certificate: existing,
       downloadUrl: `${process.env.BACKEND_URL}/certificates/cert_${certificateId}.pdf`
     });
   } catch (err) {
@@ -147,7 +118,7 @@ router.post('/generate/:participantId', protect, async (req, res) => {
   }
 });
 
-// ─── ADMIN: Bulk generate + send for selected participant IDs ──────────────────
+// ─── Bulk generate for selected participant IDs (all participants) ─────────────
 router.post('/bulk-generate', protect, async (req, res) => {
   try {
     const { participantIds, sendEmail = true } = req.body;
@@ -156,7 +127,6 @@ router.post('/bulk-generate', protect, async (req, res) => {
     }
 
     const results = [];
-
     for (const pid of participantIds) {
       try {
         const participant = await Participant.findById(pid).populate('exam');
@@ -174,7 +144,10 @@ router.post('/bulk-generate', protect, async (req, res) => {
           Object.assign(existing, { ...certData, pdfPath: pdfResult.path, emailSent: false });
           await existing.save();
         } else {
-          existing = await Certificate.create({ ...certData, participant: participant._id, exam: participant.exam._id, pdfPath: pdfResult.path });
+          existing = await Certificate.create({
+            ...certData, participant: participant._id,
+            exam: participant.exam._id, pdfPath: pdfResult.path
+          });
         }
 
         participant.certificateIssued = true;
@@ -202,82 +175,26 @@ router.post('/bulk-generate', protect, async (req, res) => {
           await existing.save();
         }
         await participant.save();
-        results.push({ id: pid, success: true, name: participant.name, email: participant.email, certificateId });
+        results.push({ id: pid, success: true, name: participant.name, certificateId });
       } catch (e) {
         results.push({ id: pid, success: false, error: e.message });
       }
     }
 
     const ok = results.filter(r => r.success).length;
-    res.json({ success: true, message: `Processed ${ok}/${participantIds.length} certificates`, results });
+    const fail = results.filter(r => !r.success).length;
+    res.json({
+      success: true,
+      successful: ok, failed: fail,
+      message: `Processed ${ok}/${participantIds.length} certificates`,
+      results
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ─── ADMIN: Revoke a certificate ──────────────────────────────────────────────
-router.delete('/:certificateId', protect, async (req, res) => {
-  try {
-    const cert = await Certificate.findOne({ certificateId: req.params.certificateId }).populate('exam');
-    if (!cert) return res.status(404).json({ success: false, message: 'Certificate not found' });
-    if (cert.exam.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized' });
-    }
-    cert.isValid = false;
-    await cert.save();
-    res.json({ success: true, message: 'Certificate revoked successfully' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-
-
-// GET /certificates/download-zip?exam=:examId — download all issued certs as ZIP
-router.get('/download-zip', protect, async (req, res) => {
-  try {
-    const { exam } = req.query;
-    if (!exam) return res.status(400).json({ success: false, message: 'exam param required' });
-
-    const archiver = require('archiver');
-    const path = require('path');
-    const fs = require('fs');
-
-    const certs = await Certificate.find({ exam, isValid: true })
-      .populate('participant', 'name');
-
-    if (certs.length === 0) {
-      return res.status(404).json({ success: false, message: 'No issued certificates found' });
-    }
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="certificates_${exam}.zip"`);
-
-    const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.pipe(res);
-
-    let added = 0;
-    for (const cert of certs) {
-      if (cert.pdfPath && fs.existsSync(cert.pdfPath)) {
-        const name = cert.participant?.name || 'participant';
-        const safe = name.replace(/[^a-z0-9]/gi, '_');
-        archive.file(cert.pdfPath, { name: `${safe}_${cert.certificateId}.pdf` });
-        added++;
-      }
-    }
-
-    if (added === 0) {
-      return res.status(404).json({ success: false, message: 'No PDF files found on disk. Re-generate certificates first.' });
-    }
-
-    await archive.finalize();
-  } catch (err) {
-    console.error('ZIP download error:', err);
-    if (!res.headersSent) res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// GET /certificates?exam=:examId — list certificates for an exam
+// ─── GET /certificates?exam=:examId ───────────────────────────────────────────
 router.get('/', protect, async (req, res) => {
   try {
     const { exam } = req.query;
@@ -291,7 +208,45 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
-// DELETE /certificates/:id — revoke a certificate
+// ─── GET download-zip ──────────────────────────────────────────────────────────
+router.get('/download-zip', protect, async (req, res) => {
+  try {
+    const { exam } = req.query;
+    if (!exam) return res.status(400).json({ success: false, message: 'exam param required' });
+
+    const archiver = require('archiver');
+    const path = require('path');
+    const fs = require('fs');
+
+    const certs = await Certificate.find({ exam, isValid: true }).populate('participant', 'name');
+    if (!certs.length) return res.status(404).json({ success: false, message: 'No issued certificates found' });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="certificates_${exam}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.pipe(res);
+
+    let added = 0;
+    for (const cert of certs) {
+      if (cert.pdfPath && fs.existsSync(cert.pdfPath)) {
+        const safe = (cert.participant?.name || 'participant').replace(/[^a-z0-9]/gi, '_');
+        archive.file(cert.pdfPath, { name: `${safe}_${cert.certificateId}.pdf` });
+        added++;
+      }
+    }
+
+    if (added === 0) {
+      return res.status(404).json({ success: false, message: 'No PDF files found. Re-generate certificates first.' });
+    }
+    await archive.finalize();
+  } catch (err) {
+    console.error('ZIP download error:', err);
+    if (!res.headersSent) res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── DELETE /:id — revoke a certificate by MongoDB _id ────────────────────────
 router.delete('/:id', protect, async (req, res) => {
   try {
     await Certificate.findByIdAndDelete(req.params.id);
