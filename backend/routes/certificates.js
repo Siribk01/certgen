@@ -20,6 +20,9 @@ router.get('/verify/:certificateId', async (req, res) => {
 });
 
 // ─── Helper: build cert data ───────────────────────────────────────────────────
+// In your backend/routes/certificates.js
+// Find the buildCertData function and add logoUrl2 to it:
+
 const buildCertData = (participant, exam, certificateId) => ({
   certificateId,
   participantName: participant.name,
@@ -35,6 +38,7 @@ const buildCertData = (participant, exam, certificateId) => ({
   fontFamily: exam.fontFamily || 'inter',
   backgroundPattern: exam.backgroundPattern || 'none',
   logoUrl: exam.logoUrl || '',
+  logoUrl2: exam.logoUrl2 || '',   // ← ADD THIS LINE
   signatureUrl: exam.signatureUrl || '',
   showSeal: exam.showSeal !== false,
   certificateTitle: exam.certificateTitle || '',

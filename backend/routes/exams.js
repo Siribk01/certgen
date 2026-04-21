@@ -34,7 +34,7 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
-// PUT update exam (general fields — title, description, instructor, etc.)
+// PUT update exam (general fields)
 router.put('/:id', protect, async (req, res) => {
   try {
     const exam = await Exam.findOneAndUpdate(
@@ -55,14 +55,20 @@ router.put('/:id/certificate-design', protect, async (req, res) => {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Only admins can customise certificate design' });
     }
+
     const allowedFields = [
-      'certificateTemplate', 'primaryColor', 'logoUrl', 'certificateTitle',
-      'certificateSubtitle', 'certificateFooterNote', 'showScore', 'showGrade',
-      'showExamDate', 'showInstructor', 'showOrganization', 'showSeal',
-      'signatureLabel', 'signatureUrl', 'sealText', 'fontFamily', 'backgroundPattern',
+      'certificateTemplate', 'primaryColor', 'fontFamily', 'backgroundPattern',
+      'logoUrl', 'logoUrl2',                          // ← second logo included
+      'signatureUrl', 'signatureLabel',
+      'certificateTitle', 'certificateSubtitle', 'certificateFooterNote',
+      'sealText',
+      'showScore', 'showGrade', 'showExamDate',
+      'showInstructor', 'showOrganization', 'showSeal',
     ];
+
     const update = {};
     allowedFields.forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
+
     const exam = await Exam.findOneAndUpdate(
       { _id: req.params.id, createdBy: req.user._id },
       update,
