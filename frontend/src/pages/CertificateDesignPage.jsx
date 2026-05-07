@@ -213,7 +213,7 @@ const CertificatePreview = ({ design, examTitle, instructorName, organization })
   const SigContent = ({ dark = false }) => (
     <div style={{ textAlign: 'center' }}>
       {signatureUrl
-        ? <img src={signatureUrl} alt="sig" style={{ height: 22, maxWidth: 80, objectFit: 'contain', display: 'block', margin: '0 auto 2px', ...(dark ? { filter: 'brightness(0) invert(1) opacity(.8)' } : {}) }} />
+        ? <img src={signatureUrl} alt="sig" style={{ height: 22, maxWidth: 80, objectFit: 'contain', display: 'block', margin: '0 auto 2px', mixBlendMode: dark ? 'normal' : 'multiply', ...(dark ? { filter: 'brightness(0) invert(1) opacity(.8)' } : {}) }} />
         : <div style={{ width: 70, height: 1.5, background: dark ? `${pc}80` : '#aaa', margin: '0 auto 2px' }} />}
       <div style={{ fontSize: 10, fontWeight: 700, color: dark ? pc : '#333' }}>{showInstructor ? (instructorName || 'Instructor') : ''}</div>
       <div style={{ fontSize: 9, color: dark ? 'rgba(255,255,255,.4)' : '#aaa', fontStyle: 'italic' }}>{signatureLabel}</div>

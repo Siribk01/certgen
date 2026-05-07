@@ -123,8 +123,8 @@ const generateCertificateHTML = (data, template = 'modern') => {
 
   // ── Signature ─────────────────────────────────────────────────────────────
   const makeSig = (lineColor, lineH, imgFilter) => signatureUrl
-    ? `<img src="${signatureUrl}" alt="Signature" style="height:65px;max-width:220px;object-fit:contain;display:block;margin:0 auto 8px;${imgFilter ? 'filter:' + imgFilter + ';' : ''}">`
-    : `<div style="width:200px;height:${lineH}px;background:${lineColor};margin:0 auto 8px;"></div>`;
+  ? `<img src="${signatureUrl}" alt="Signature" style="height:65px;max-width:220px;object-fit:contain;display:block;margin:0 auto 8px;${imgFilter ? 'filter:' + imgFilter + ';' : 'filter:brightness(0) opacity(0.85);'}">`
+  : `<div style="width:200px;height:${lineH}px;background:${lineColor};margin:0 auto 8px;"></div>`;
 
   // ── Footer 3-column ───────────────────────────────────────────────────────
   const makeFooter = ({ lineColor, lineH = 2, imgFilter = '', nameColor, roleColor, sealColor, lblColor, valColor }) => {
